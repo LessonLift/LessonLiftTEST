@@ -537,6 +537,31 @@ footer{border-top:1px solid var(--border);padding:36px 24px;text-align:center;fo
       <div class="dash-stat"><div class="dash-stat-num" id="stat-checked" style="color:var(--red)">0</div><div class="dash-stat-label">Essays Checked</div></div>
     </div>
 
+    <!-- API Key Banner -->
+    <div id="api-key-banner" style="background:rgba(247,183,49,.07);border:1px solid rgba(247,183,49,.25);border-radius:14px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#F7B731" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:13px;font-weight:700;color:#F7B731;margin-bottom:3px">Anthropic API Key Required</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.45)">The AI tools need your Anthropic API key. Get one free at <strong style="color:rgba(255,255,255,.7)">console.anthropic.com</strong> then API Keys.</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="position:relative">
+          <input id="api-key-input" type="password" placeholder="sk-ant-..." style="background:rgba(255,255,255,.07);border:1px solid rgba(247,183,49,.3);border-radius:9px;padding:9px 38px 9px 13px;color:#fff;font-size:13px;font-family:monospace;outline:none;width:240px;transition:border-color .2s"/>
+          <button onclick="toggleKeyVis()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,.35);padding:0;line-height:0">
+            <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <button onclick="saveApiKey()" style="background:rgba(247,183,49,.2);border:1px solid rgba(247,183,49,.4);color:#F7B731;font-size:13px;font-weight:700;padding:9px 18px;border-radius:9px;cursor:pointer;font-family:inherit;white-space:nowrap">Save Key</button>
+      </div>
+    </div>
+    <div id="api-key-saved" style="display:none;background:rgba(62,207,191,.07);border:1px solid rgba(62,207,191,.22);border-radius:14px;padding:13px 20px;margin-bottom:24px;align-items:center;justify-content:space-between;gap:12px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#3ECFBF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="17" height="17"><polyline points="20 6 9 17 4 12"/></svg>
+        <span style="font-size:13px;font-weight:600;color:var(--teal)">API key saved - tools are ready to use</span>
+      </div>
+      <button onclick="clearApiKey()" style="background:none;border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.35);font-size:12px;font-weight:600;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit">Change Key</button>
+    </div>
+
     <!-- Tool Tabs -->
     <div class="tool-tabs">
       <button class="tool-tab active checker" id="tab-checker" onclick="switchTab('checker')">
@@ -800,6 +825,7 @@ function handlePayment(){
 
 // ─── DASHBOARD ────────────────────────────────────────────
 function renderDash(){
+  checkApiKeyState();
   document.getElementById('dash-name').textContent=S.user?.name||'Educator';
   const p=PLANS.find(x=>x.id===S.user?.plan);
   if(p){
@@ -829,6 +855,7 @@ document.getElementById('checker-ta').addEventListener('input',function(){
 });
 const checkMsgs=['Scanning for AI patterns...','Analyzing sentence structure...','Checking writing consistency...','Comparing linguistic fingerprints...','Detecting plagiarism signals...','Generating detailed report...'];
 async function runChecker(){
+  if(!getApiKey()){alert("Please enter your Anthropic API key in the field above first.");return;}
   const text=document.getElementById('checker-ta').value.trim();
   if(!text||text.split(/\s+/).length<30){alert('Please enter at least 30 words.');return;}
   const btn=document.getElementById('checker-btn');
@@ -842,7 +869,7 @@ async function runChecker(){
     if(checkerOpts.plag)parts.push('plagiarism patterns');
     if(checkerOpts.qual)parts.push('writing quality assessment');
     const prompt=`You are an expert academic integrity tool. Analyze this student essay for: ${parts.join(', ')}.\n\nEssay:\n"""\n${text}\n"""\n\nRespond ONLY with valid JSON, no markdown:\n{\n"ai_score":<0-100>,\n"plagiarism_score":<0-100>,\n"originality_score":<0-100>,\n"verdict":<"clean"|"suspicious"|"flagged">,\n"verdict_title":<string>,\n"verdict_message":<2-3 sentences>,\n"ai_findings":[<3-5 strings>],\n"plag_findings":[<3-4 strings>],\n"quality_findings":[<3-4 strings>],\n"highlighted_sentences":[{"text":<exact sentence>,"type":<"ai"|"plag"|"clean">,"reason":<short string>}],\n"summary":<1-2 sentence teacher summary>\n}`;
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages:[{role:'user',content:prompt}]})});
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':getApiKey(),'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages:[{role:'user',content:prompt}]})});
     const data=await resp.json();
     const raw=data.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim();
     const r=JSON.parse(raw);
@@ -894,6 +921,7 @@ function selDiff(d){cDiff=d;['Easy','Medium','Hard'].forEach(x=>{const e=documen
 function togInc(el,item){cIncludes.has(item)?(cIncludes.delete(item),el.classList.remove('on')):(cIncludes.add(item),el.classList.add('on'));}
 const creatorMsgs=['Designing your assignment...','Building the rubric...','Crafting learning objectives...','Writing instructions...','Adding example questions...','Polishing the final output...'];
 async function runCreator(){
+  if(!getApiKey()){alert("Please enter your Anthropic API key in the field above first.");return;}
   const subject=document.getElementById('c-subject').value;
   const grade=document.getElementById('c-grade').value;
   const topic=document.getElementById('c-topic').value.trim();
@@ -908,7 +936,7 @@ async function runCreator(){
   try{
     const incList=[...cIncludes].join(', ');
     const prompt=`You are an expert educator. Create a complete ${cType} assignment:\n- Subject: ${subject}\n- Grade: ${grade}\n- Topic: ${topic}\n- Type: ${cType}\n- Difficulty: ${cDiff}\n- Duration: ${dur}\n- Include: ${incList}\n${notes?'- Notes: '+notes:''}\n\nRespond ONLY with valid JSON, no markdown:\n{\n"title":<string>,\n"overview":<2-3 sentence teacher overview>,\n"learning_objectives":[<3-5 strings>],\n"instructions":<detailed student instructions using ## for headers and - for bullets>,\n"rubric":[{"criterion":<string>,"excellent":<string>,"proficient":<string>,"developing":<string>,"points":<number>}],\n"example_questions":[<4-6 strings>],\n"extension_activities":[<2-3 strings>],\n"differentiation_tips":{"support":<string>,"challenge":<string>},\n"materials_needed":[<list>],\n"assessment_notes":<short teacher note>\n}`;
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2500,messages:[{role:'user',content:prompt}]})});
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':getApiKey(),'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2500,messages:[{role:'user',content:prompt}]})});
     const data=await resp.json();
     const raw=data.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim();
     const r=JSON.parse(raw);
@@ -986,6 +1014,36 @@ function renderCreatorResults(r,subject,grade){
 }
 function resetCreator(){document.getElementById('creator-results').style.display='none';document.getElementById('creator-results').innerHTML='';window.scrollTo({top:0,behavior:'smooth'});}
 function copyEl(id){const el=document.getElementById('instr-body');if(!el)return;navigator.clipboard.writeText(el.innerText).catch(()=>{});}
+
+
+// ─── API KEY ─────────────────────────────────────────────
+function getApiKey(){return sessionStorage.getItem('ll_api_key')||'';}
+function saveApiKey(){
+  const k=document.getElementById('api-key-input').value.trim();
+  if(!k||!k.startsWith('sk-')){alert('Please enter a valid Anthropic API key (starts with sk-)');return;}
+  sessionStorage.setItem('ll_api_key',k);
+  document.getElementById('api-key-banner').style.display='none';
+  document.getElementById('api-key-saved').style.display='flex';
+}
+function clearApiKey(){
+  sessionStorage.removeItem('ll_api_key');
+  document.getElementById('api-key-input').value='';
+  document.getElementById('api-key-banner').style.display='flex';
+  document.getElementById('api-key-saved').style.display='none';
+}
+function toggleKeyVis(){
+  const inp=document.getElementById('api-key-input');
+  inp.type=inp.type==='password'?'text':'password';
+}
+function checkApiKeyState(){
+  if(getApiKey()){
+    document.getElementById('api-key-banner').style.display='none';
+    document.getElementById('api-key-saved').style.display='flex';
+  } else {
+    document.getElementById('api-key-banner').style.display='flex';
+    document.getElementById('api-key-saved').style.display='none';
+  }
+}
 
 // ─── UTILS ───────────────────────────────────────────────
 function showEl(id){document.getElementById(id).style.display='block';}
